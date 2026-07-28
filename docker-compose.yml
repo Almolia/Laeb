@@ -397,7 +397,7 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-media}
     ports: ["8010:8000"]
     depends_on:
-      minio: { condition: service_healthy }
+      minio: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     labels:
       - traefik.enable=true
@@ -420,7 +420,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-media}
     depends_on:
-      minio: { condition: service_healthy }
+      minio: { condition: service_started }
       rabbitmq: { condition: service_healthy }
 
   notification:
