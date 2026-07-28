@@ -187,3 +187,163 @@ Wallet مصرف می‌کند:
   policy یا service credential مشترک Gateway ایزوله شوند.
 - این Compose فقط Wallet و پیش‌نیازهای آن را دارد و باید هنگام ورود قالب A1 در Compose کل تیم merge شود.
 - mock PSP عمداً پرداخت واقعی، card number و authentication بانکی ندارد.
+
+---
+
+## ماتریس تطبیق کامل صورت مسئله و نقش A3
+
+این بخش، `A3-wallet-payments.md`، گزارش فاز ۱ و User Storyهای واگذارشده به A3 را بندبه‌بند
+به پیاده‌سازی و شاهد تست متصل می‌کند. وضعیت‌های این جدول‌ها بر اساس اجرای واقعی در تاریخ
+`2026-07-28` ثبت شده‌اند.
+
+### User Storyها
+
+| User Story | خواسته | مسئولیت دقیق Wallet | پیاده‌سازی | شاهد تست | وضعیت |
+|---|---|---|---|---|---|
+| US-14 | هر فروش به‌صورت تراکنشی ۷۰٪ برای توسعه‌دهنده و ۳۰٪ برای پلتفرم تقسیم شود | debit خریدار و دو credit در یک transaction و یک `txGroupId` | `split_revenue`، `purchase_entries` و `POST /internal/purchase-split` | unit برای rounding و E2E با مبلغ ۵۰۰٬۰۰۰ و نتیجه `-500000/+350000/+150000` | ✅ پاس |
+| US-28، نیمه settlement | پس از match وجه و آیتم گم نشوند | مصرف `trade.matched`، انتقال وجه buyer→seller، پاسخ قطعی success/failure و idempotent consumer | `settle_trade`، `claim_event`، `q.wallet` و `trade.payment_settled` | E2E موفق، insufficient funds، redelivery یک event ID و کنترل موجودی seller | ✅ پاس |
+| US-34 | شارژ کیف پول از طریق درگاه پرداخت | ایجاد `PENDING`، تماس با PSP، webhook عمومی، credit یک‌باره و event | `initiate_topup`، `handle_callback` و mock PSP | E2E واقعی HTTP و integration test تکرار callback | ✅ پاس |
+| US-35 | redeem گیفت‌کارت برای افزایش موجودی | تولید کد، row lock، ثبت مصرف و credit در یک transaction | `create_cards` و `redeem_card` | integration concurrency و E2E replay/second-key conflict | ✅ پاس |
+| US-36 | refund باید ثبت‌های خرید را دقیقاً معکوس کند | خواندن گروه اصلی، منع reversal دوم و درج گروه flip‌شده | `reverse_group` و `POST /internal/reverse` | unit cancellation، integration restore و E2E خطاهای 404/409 | ✅ پاس |
+
+مرزهای دامنه:
+
+- قانون «درخواست refund حداکثر تا ۱۲ ساعت» متعلق به Order/B1 است؛ Wallet بعد از تایید Order فقط
+  reversal حسابداری را انجام می‌دهد.
+- انتقال مالکیت آیتم متعلق به Trading/B2 است؛ Wallet نتیجه‌ی قطعی پرداخت را برای ادامه یا جبران
+  ساگا منتشر می‌کند.
+
+### سه قانون اصلی صحت مالی
+
+| الزام A3 | نحوه پوشش | شاهد |
+|---|---|---|
+| مبلغ فقط integer minor unit؛ float ممنوع | تمام schemaها `BIGINT`، مدل‌ها `int` و APIها `amountMinor` دارند | unit suite و OpenAPI schema |
+| Ledger فقط append-only | برنامه فقط `INSERT` دارد و trigger دیتابیس UPDATE و DELETE را رد می‌کند | E2E هر دو دستور UPDATE و DELETE را اجرا و خطای `append-only` دریافت می‌کند |
+| هر transaction group متوازن است | `assert_balanced` پیش از persist تمام entryها اجرا می‌شود | unit tests و SQL invariant روی تمام داده‌های E2E؛ صفر گروه نامتوازن |
+
+### مدل داده
+
+| خواسته صورت نقش | پیاده‌سازی | وضعیت |
+|---|---|---|
+| `accounts` با owner یکتا و cached balance | UUID، `USER/PLATFORM` check، unique owner و `BIGINT balance_minor` | ✅ migration و PostgreSQL واقعی |
+| `ledger_entries` با group/account/direction/amount/reason/reference/correlation | تمام ستون‌ها، FK، indexهای account و group و checkهای direction/amount | ✅ migration و query واقعی |
+| `gift_cards` با redemption metadata | code PK، amount، `redeemed_by` و `redeemed_at` | ✅ |
+| `topups` با `PENDING/SUCCEEDED/FAILED` و PSP id | check وضعیت، payment id یکتا و redirect URL | ✅ |
+| `idempotency_keys` | key، hash canonical درخواست، response JSON و timestamp | ✅ |
+| Transactional Outbox | payload JSON، event name، correlation، producer و `published_at` | ✅؛ پایان E2E صفر پیام unpublished |
+| Idempotent Inbox | `processed_events(event_id PK)` و `INSERT ... ON CONFLICT ... RETURNING` | ✅؛ first claim true و redelivery false |
+| seed حساب platform در startup | startup hook پس از Alembic، با upsert و row lock | ✅ |
+| ساخت lazy حساب کاربر | upsert در اولین GET یا عملیات مالی؛ بدون وابستگی به `user.registered` | ✅ |
+
+عدم وجود check عمومی `balance_minor >= 0` عمدی است: debitهای معمولی در application layer منفی‌شدن
+کاربر را رد می‌کنند، اما reversal اجازه می‌دهد بدهی توسعه‌دهنده صادقانه ثبت شود. حساب platform نیز
+طرف مقابل صدور اعتبار top-up/gift card است و می‌تواند منفی باشد.
+
+### Endpointهای عمومی
+
+| Endpoint | قرارداد مورد انتظار | پیاده‌سازی و تست |
+|---|---|---|
+| `GET /wallets/me` | JWT، `{userId,balanceMinor}` | E2E: بدون JWT برابر 401، با JWT برابر 200 و lazy account |
+| `GET /wallets/me/ledger` | JWT، pagination و فهرست entryها | limit/offset validation و E2E با ledger غیرخالی |
+| `POST /topups/initiate` | JWT، `{amountMinor}` → `{topupId,redirectUrl}` | E2E Wallet→mock-PSP واقعی و redirect روی 8020 |
+| `POST /topups/callback` | عمومی و بدون JWT، `{paymentId,reference,status}` | reference/payment/status validation، row lock و callback idempotent |
+| `POST /giftcards/redeem` | JWT، `{code}` → مبلغ و موجودی جدید | idempotency، row lock و conflict بعد از مصرف |
+| `POST /giftcards` | فقط ADMIN، `{amountMinor,count}` | RBAC و تولید کدهای `XXXX-XXXX-XXXX-XXXX`؛ E2E برابر 201 |
+
+### Endpointهای داخلی
+
+| Endpoint | رفتار | تست واقعی |
+|---|---|---|
+| `/internal/purchase-split` | سه entry، ۷۰/۳۰، row lock ثابت و یک commit | success، replay، insufficient و zero purchase |
+| `/internal/debit` | debit کاربر، credit platform و منع منفی‌شدن | E2E debit و balance دقیق |
+| `/internal/credit` | debit platform، credit کاربر | E2E credit، replay و key-reuse conflict |
+| `/internal/transfer` | debit sender و credit recipient | E2E انتقال و انتقال برگشتی با موجودی دقیق |
+| `/internal/reverse` | flip تمام entryها، ref به گروه اصلی | restore، `TX_GROUP_NOT_FOUND` و `ALREADY_REVERSED` |
+
+تمام endpointهای پولی داخلی `Idempotency-Key` را اجباری می‌کنند. قفل advisory بر اساس key، hash
+شامل scope و body، نتیجه و ledger movement در یک transaction هستند. تست‌ها سه حالت missing key،
+replay یکسان و استفاده همان key با body متفاوت را پوشش می‌دهند.
+
+### خطاهای قراردادی B1/B2
+
+| HTTP/code | شرایط | تست |
+|---|---|---|
+| `400 IDEMPOTENCY_KEY_REQUIRED` | header وجود ندارد | ✅ E2E |
+| `409 IDEMPOTENCY_KEY_REUSED` | key یکسان و body متفاوت | ✅ E2E |
+| `409 INSUFFICIENT_FUNDS` | debit/purchase/trade بیشتر از موجودی | ✅ pytest و E2E API/event |
+| `404 TX_GROUP_NOT_FOUND` | reverse گروه ناشناخته | ✅ E2E |
+| `409 ALREADY_REVERSED` | reverse مجدد با key جدید | ✅ E2E |
+| `404 GIFTCARD_NOT_FOUND` | کد ناشناخته | پیاده‌سازی‌شده در `redeem_card` |
+| `409 GIFTCARD_ALREADY_REDEEMED` | مصرف دوم کارت | ✅ pytest concurrency و E2E |
+
+تمام خطاهای HTTP از envelope مشترک `error.code/message/correlationId` استفاده می‌کنند.
+
+### جزئیات حساس purchase، top-up، gift card و reversal
+
+| بند صورت نقش | نتیجه تطبیق |
+|---|---|
+| accountها پیش از خرید با ترتیب ثابت lock شوند | query نهایی `ORDER BY Account.id FOR UPDATE` دارد؛ تست double-spend هم‌زمان پاس است |
+| idempotency و پول در یک transaction باشند | dependency فقط پس از ساخت response و `IdempotencyKey` commit می‌کند |
+| خرید صفر برای تخفیف ۱۰۰٪ موفق و دارای سه entry صفر باشد | E2E موفق و balance بدون تغییر |
+| callback فقط reference متعلق به top-up را بپذیرد | UUID، وجود row، payment id، وضعیت و row lock کنترل می‌شوند |
+| callback تکراری دوباره credit نکند | integration test: اول `credited=true` و دوم `credited=false` |
+| اطلاعات کارت هرگز وارد Wallet نشود | قرارداد PSP فقط amount/callback/reference دارد؛ schema و log هیچ card field ندارند |
+| گیفت‌کارت concurrency-safe باشد | `SELECT ... FOR UPDATE`؛ از دو thread دقیقاً یکی موفق است |
+| کد کارت ۱۶ uppercase alphanumeric باشد | `new_code` خروجی چهار گروه چهارتایی می‌دهد |
+| refund entryهای اصلی را تغییر ندهد | گروه جدید با `ref_type=REVERSAL` و `ref_id=original` درج می‌شود |
+| developer در refund بتواند بدهکار شود | check عمومی balance حذف و تصمیم مستند شده است |
+
+### Worker و رویدادها
+
+| الزام | پیاده‌سازی | تست |
+|---|---|---|
+| worker شامل publisher و consumer باشد | thread daemon برای outbox و main thread برای `q.wallet` | container مستقل `wallet-worker` سالم |
+| exchange topic و queue durable | `platform.events` و `q.wallet` با binding `trade.matched` | RabbitMQ واقعی |
+| event ورودی idempotent باشد | processed event با PK و atomic claim | pytest regression و E2E انتشار دوباره همان event ID |
+| همیشه settlement result منتشر شود | success و `DomainError` هر دو outbox event می‌سازند | E2E برای `ok=true` و `ok=false` |
+| outbox پیام‌ها را از دست ندهد | publisher confirms و ثبت `published_at` پس از پذیرش RabbitMQ | E2E: تمام outboxها published |
+| نبود consumer فعلی publisher را قفل نکند | event به exchange با `mandatory=false` و publisher confirm ارسال می‌شود | regression کشف‌شده و اصلاح‌شده در Docker واقعی |
+
+### NFRهای مرتبط با A3
+
+| NFR | پوشش | مدرک |
+|---|---|---|
+| NFR-03 یکپارچگی مالی | ACID محلی، double-entry، fixed row locks، idempotency و rollback | concurrency/integration/E2E |
+| NFR-04 امنیت | JWT روی routeهای کاربر، ADMIN RBAC، عدم دریافت اطلاعات کارت | auth E2E و قرارداد mock PSP |
+| NFR-06 قابلیت اطمینان workflow | Transactional Outbox، publisher confirms، processed events و settlement failure event | RabbitMQ E2E |
+| NFR-07 حسابرسی | append-only trigger، correlation ID و reversal entry | mutation rejection و invariant SQL |
+| NFR-09 استقرارپذیری | Dockerfile مستقل، env config و Compose با health dependency | پنج container واقعی بالا و healthy |
+| NFR-10 مشاهده‌پذیری | `/health`، `/ready`، `/metrics`، JSON log و correlation propagation | HTTP E2E و Compose healthcheck |
+
+### نتایج آزمون ثبت‌شده
+
+محیط میزبان و container:
+
+- virtualenv: Python 3.13.7؛ تمام نسخه‌های `requirements.txt` نصب شدند.
+- imageهای اجرایی: Python 3.12-slim، ساخته‌شده با `docker build --network=host`.
+- PostgreSQL 17 Alpine و RabbitMQ 4 Management Alpine.
+- containerهای `postgres`، `rabbitmq`، `mock-psp` و `wallet` در پایان تست healthy و worker running بودند.
+
+دستورها و نتیجه:
+
+```bash
+python3.13 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/pytest services/wallet/tests/test_domain.py -q --cov=app.domain
+# 9 passed — domain coverage 94%
+
+TEST_DATABASE_URL=postgresql+psycopg://wallet:wallet@localhost:5432/wallet \
+  .venv/bin/pytest services/wallet/tests -q
+# 15 passed
+
+docker build --network=host -f services/wallet/Dockerfile -t laeb-wallet .
+docker build --network=host -f mock-psp/Dockerfile -t laeb-mock-psp .
+docker compose up -d --no-build
+
+.venv/bin/python scripts/test_a3_e2e.py
+# A3 end-to-end acceptance: PASS
+```
+
+تست E2E علاوه بر HTTP، مستقیماً PostgreSQL و RabbitMQ را بررسی می‌کند؛ بنابراین پاسخ 200 به‌تنهایی
+معیار قبولی نیست و ledger invariant، موجودی نهایی، outbox، redelivery و triggerهای دیتابیس نیز
+اثبات می‌شوند.

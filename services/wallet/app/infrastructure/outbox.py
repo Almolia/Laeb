@@ -78,7 +78,10 @@ def publish_pending_once() -> int:
                     properties=pika.BasicProperties(
                         content_type="application/json", delivery_mode=2
                     ),
-                    mandatory=True,
+                    # Publisher confirms prove RabbitMQ accepted the durable message.
+                    # A topic event may legitimately have no active/bound consumer yet;
+                    # treating that case as a publish failure would block the whole outbox.
+                    mandatory=False,
                 )
                 row.published_at = datetime.now(timezone.utc)
                 published += 1
@@ -89,12 +92,13 @@ def publish_pending_once() -> int:
 
 
 def claim_event(session, event_id: uuid.UUID) -> bool:
-    result = session.execute(
+    inserted = session.execute(
         insert(ProcessedEvent)
         .values(event_id=event_id)
         .on_conflict_do_nothing(index_elements=["event_id"])
-    )
-    return result.rowcount == 1
+        .returning(ProcessedEvent.event_id)
+    ).scalar_one_or_none()
+    return inserted is not None
 
 
 def run_publisher() -> None:

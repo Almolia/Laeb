@@ -23,6 +23,7 @@ from app.application.giftcards import redeem_card  # noqa: E402
 from app.application.ledger import credit_user, purchase_split, reverse_group  # noqa: E402
 from app.application.topups import handle_callback  # noqa: E402
 from app.infrastructure.models import Account, GiftCard, Topup  # noqa: E402
+from app.infrastructure.outbox import claim_event  # noqa: E402
 
 
 @pytest.fixture()
@@ -98,22 +99,31 @@ def test_reversal_restores_balances(session):
 def test_repeated_psp_callback_credits_once(session):
     user_id = uuid.uuid4()
     topup_id = uuid.uuid4()
+    payment_id = f"payment-{uuid.uuid4()}"
     session.add(
         Topup(
             id=topup_id,
             user_id=user_id,
             amount_minor=1000,
             status="PENDING",
-            psp_payment_id="payment-1",
+            psp_payment_id=payment_id,
         )
     )
     session.commit()
-    first = handle_callback(session, "payment-1", str(topup_id), "SUCCEEDED")
+    first = handle_callback(session, payment_id, str(topup_id), "SUCCEEDED")
     session.commit()
-    second = handle_callback(session, "payment-1", str(topup_id), "SUCCEEDED")
+    second = handle_callback(session, payment_id, str(topup_id), "SUCCEEDED")
     session.commit()
     assert first["credited"] is True
     assert second["credited"] is False
+
+
+def test_inbox_claim_is_true_once_and_false_on_redelivery(session):
+    event_id = uuid.uuid4()
+    assert claim_event(session, event_id) is True
+    session.commit()
+    assert claim_event(session, event_id) is False
+    session.commit()
 
 
 def test_gift_card_is_single_use_under_concurrency():
