@@ -14,7 +14,10 @@ def now_utc() -> datetime:
 
 class Account(Base):
     __tablename__ = "accounts"
-    __table_args__ = (UniqueConstraint("owner_type", "owner_id", name="uq_account_owner"),)
+    __table_args__ = (
+        UniqueConstraint("owner_type", "owner_id", name="uq_account_owner"),
+        CheckConstraint("owner_type IN ('USER','PLATFORM')", name="ck_account_owner_type"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     owner_type: Mapped[str] = mapped_column(String(10), nullable=False)
@@ -27,6 +30,7 @@ class LedgerEntry(Base):
     __tablename__ = "ledger_entries"
     __table_args__ = (
         CheckConstraint("amount_minor >= 0", name="ck_ledger_amount_nonnegative"),
+        CheckConstraint("direction IN ('DEBIT','CREDIT')", name="ck_ledger_direction"),
         Index("ix_ledger_account", "account_id", "created_at"),
         Index("ix_ledger_group", "tx_group_id"),
     )

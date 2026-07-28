@@ -19,6 +19,7 @@ def upgrade() -> None:
         sa.Column("balance_minor", sa.BigInteger(), nullable=False, server_default="0"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.UniqueConstraint("owner_type", "owner_id", name="uq_account_owner"),
+        sa.CheckConstraint("owner_type IN ('USER','PLATFORM')", name="ck_account_owner_type"),
     )
     op.create_table(
         "ledger_entries",
@@ -33,6 +34,7 @@ def upgrade() -> None:
         sa.Column("correlation_id", sa.String(64)),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.CheckConstraint("amount_minor >= 0", name="ck_ledger_amount_nonnegative"),
+        sa.CheckConstraint("direction IN ('DEBIT','CREDIT')", name="ck_ledger_direction"),
     )
     op.create_index("ix_ledger_account", "ledger_entries", ["account_id", "created_at"])
     op.create_index("ix_ledger_group", "ledger_entries", ["tx_group_id"])
