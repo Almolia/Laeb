@@ -6,6 +6,7 @@ useful on a laptop without Docker.
 """
 
 import os
+import threading
 import uuid
 
 import pytest
@@ -18,8 +19,10 @@ if not DATABASE_URL:
     pytest.skip("TEST_DATABASE_URL is not configured", allow_module_level=True)
 
 from app.application.idempotency import execute_idempotent  # noqa: E402
+from app.application.giftcards import redeem_card  # noqa: E402
 from app.application.ledger import credit_user, purchase_split, reverse_group  # noqa: E402
-from app.infrastructure.models import Account, LedgerEntry  # noqa: E402
+from app.application.topups import handle_callback  # noqa: E402
+from app.infrastructure.models import Account, GiftCard, Topup  # noqa: E402
 
 
 @pytest.fixture()
@@ -90,3 +93,55 @@ def test_reversal_restores_balances(session):
     balances = {row.owner_id: row.balance_minor for row in values}
     assert balances[buyer] == 500_000
     assert balances[developer] == 0
+
+
+def test_repeated_psp_callback_credits_once(session):
+    user_id = uuid.uuid4()
+    topup_id = uuid.uuid4()
+    session.add(
+        Topup(
+            id=topup_id,
+            user_id=user_id,
+            amount_minor=1000,
+            status="PENDING",
+            psp_payment_id="payment-1",
+        )
+    )
+    session.commit()
+    first = handle_callback(session, "payment-1", str(topup_id), "SUCCEEDED")
+    session.commit()
+    second = handle_callback(session, "payment-1", str(topup_id), "SUCCEEDED")
+    session.commit()
+    assert first["credited"] is True
+    assert second["credited"] is False
+
+
+def test_gift_card_is_single_use_under_concurrency():
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    code = f"TEST-{uuid.uuid4().hex[:4].upper()}-{uuid.uuid4().hex[:4].upper()}-{uuid.uuid4().hex[:4].upper()}"
+    with factory() as seed:
+        seed.add(GiftCard(code=code, amount_minor=500))
+        seed.commit()
+    users = [uuid.uuid4(), uuid.uuid4()]
+    barrier = threading.Barrier(2)
+    results: list[object] = []
+
+    def redeem(user_id):
+        with factory() as db:
+            barrier.wait()
+            try:
+                value = redeem_card(db, user_id, code)
+                db.commit()
+                results.append(value)
+            except Exception as exc:
+                db.rollback()
+                results.append(exc)
+
+    threads = [threading.Thread(target=redeem, args=(user_id,)) for user_id in users]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert sum(isinstance(result, dict) for result in results) == 1
+    engine.dispose()

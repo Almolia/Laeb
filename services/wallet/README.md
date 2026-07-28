@@ -82,6 +82,8 @@ Wallet در همان transaction سه ledger row ثبت می‌کند: buyer `DE
 - `409 INSUFFICIENT_FUNDS`: خرید ایجاد نشده و ledger row نوشته نشده است.
 - `409 IDEMPOTENCY_KEY_REUSED`: key با body متفاوت استفاده شده؛ key جدید نسازید و علت را اصلاح کنید.
 - `400 IDEMPOTENCY_KEY_REQUIRED`: header ارسال نشده است.
+- `404 TX_GROUP_NOT_FOUND`: گروهی برای reverse پیدا نشد.
+- `409 ALREADY_REVERSED`: گروه قبلاً با یک reversal موفق جبران شده است.
 
 ### Settlement — برای B2
 
@@ -179,6 +181,7 @@ Wallet مصرف می‌کند:
 - REST/JSON برای callهای sync داخلی استفاده شده و transport با ADR-04 از Phase 1 به‌روزرسانی شده است.
 - حساب کاربر lazy ساخته می‌شود؛ Wallet به `user.registered` برای ایجاد حساب وابسته نیست.
 - حساب platform طرف مقابل صدور اعتبار است و در صورت top-up/gift card می‌تواند منفی شود.
+- برای debit عادی، `balance_minor` هرگز زیر صفر نمی‌رود؛ فقط reversal می‌تواند بدهی توسعه‌دهنده ایجاد کند.
 - endpointهای internal در Compose برای سرویس‌های هم‌تیمی هستند؛ در Compose نهایی باید با network
   policy یا service credential مشترک Gateway ایزوله شوند.
 - این Compose فقط Wallet و پیش‌نیازهای آن را دارد و باید هنگام ورود قالب A1 در Compose کل تیم merge شود.
