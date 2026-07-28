@@ -5,8 +5,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cp .env.example .env
-      - run: docker compose build
-      - run: docker compose up -d
-      - run: sleep 45 && bash scripts/smoke.sh
-      - run: docker compose down -v
+
+      - name: Prepare env
+        run: cp .env.example .env
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Start stack without workers
+        # Full stack + 11 workers OOMs GitHub runners (~7GB).
+        # Smoke only needs API containers behind the gateway.
+        run: |
+          set -euo pipefail
+          mapfile -t SERVICES < <(docker compose config --services | grep -v -- '-worker$')
+          echo "Starting: ${SERVICES[*]}"
+          docker compose up -d --wait --wait-timeout 240 "${SERVICES[@]}"
+
+      - name: Smoke through gateway
+        run: bash scripts/smoke.sh
+
+      - name: Dump diagnostics on failure
+        if: failure()
+        run: |
+          docker compose ps -a || true
+          docker compose logs --tail=120 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

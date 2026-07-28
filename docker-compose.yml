@@ -60,10 +60,9 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
     volumes: [miniodata:/data]
     ports: ["9000:9000", "9001:9001"]
+    # minio/minio is scratch-based (no curl/bash). Dependents use service_started.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      retries: 10
+      disable: true
 
   gateway:
     image: traefik:v3.1
