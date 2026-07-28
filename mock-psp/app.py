@@ -1,4 +1,5 @@
 import uuid
+import time
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI
@@ -25,6 +26,8 @@ def charge(request: ChargeRequest, background: BackgroundTasks) -> dict:
     payments[payment_id] = {"status": "PENDING", **request.model_dump()}
 
     def callback() -> None:
+        # Give Wallet time to commit the PENDING top-up before the bank webhook arrives.
+        time.sleep(0.1)
         with httpx.Client(timeout=10) as client:
             response = client.post(
                 request.callbackUrl,

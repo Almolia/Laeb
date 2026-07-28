@@ -1,11 +1,14 @@
 from fastapi import FastAPI
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from shared_kernel.config import get_settings
-from shared_kernel.db import get_session
+from app.api import router as wallet_router
+from app.domain.model import DomainError
+from shared_kernel.db import session_factory
+from shared_kernel.errors import AppError, error_body
 from shared_kernel.errors import install_error_handlers
 from shared_kernel.logging import configure_logging
 from shared_kernel.middleware import install_request_middleware
@@ -16,6 +19,12 @@ configure_logging(settings.log_level)
 app = FastAPI(title="Wallet Service", version="1.0.0")
 install_error_handlers(app)
 install_request_middleware(app, settings.service_name)
+app.include_router(wallet_router)
+
+
+@app.exception_handler(DomainError)
+async def domain_error_handler(_request, exc: DomainError):
+    return JSONResponse(status_code=exc.status, content=error_body(exc.code, exc.message))
 
 
 @app.get("/health", tags=["operations"])
@@ -25,11 +34,8 @@ def health() -> dict[str, str]:
 
 @app.get("/ready", tags=["operations"])
 def ready() -> dict[str, str]:
-    session = next(get_session())
-    try:
+    with session_factory()() as session:
         session.execute(text("SELECT 1"))
-    finally:
-        session.close()
     return {"status": "ready"}
 
 

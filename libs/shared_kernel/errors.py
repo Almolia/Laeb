@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -29,6 +30,7 @@ def install_error_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=exc.status, content=error_body(exc.code, exc.message))
 
     @app.exception_handler(ValidationError)
+    @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
         _request: Request, exc: ValidationError
     ) -> JSONResponse:
