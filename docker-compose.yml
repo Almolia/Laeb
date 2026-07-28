@@ -1,29 +1,29 @@
-name: laeb
+﻿name: laeb
 
 x-service-env: &service-env
-  ENV: ${ENV}
-  LOG_LEVEL: ${LOG_LEVEL}
-  JWT_SECRET: ${JWT_SECRET}
-  JWT_ALG: ${JWT_ALG}
-  JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
-  RABBITMQ_URL: ${RABBITMQ_URL}
-  EVENT_EXCHANGE: ${EVENT_EXCHANGE}
-  REDIS_URL: ${REDIS_URL}
-  MONGO_URL: ${MONGO_URL}
-  PLATFORM_ACCOUNT_ID: ${PLATFORM_ACCOUNT_ID}
+  ENV: ${ENV:-dev}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}
+  JWT_ALG: ${JWT_ALG:-HS256}
+  JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+  RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+  EVENT_EXCHANGE: ${EVENT_EXCHANGE:-platform.events}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+  MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017}
+  PLATFORM_ACCOUNT_ID: ${PLATFORM_ACCOUNT_ID:-00000000-0000-0000-0000-000000000001}
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_SUPER_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_SUPER_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_SUPER_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPER_PASSWORD:-postgres}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports: ["5432:5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPER_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPER_USER:-postgres}"]
       interval: 5s
       retries: 10
 
@@ -56,8 +56,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
     volumes: [miniodata:/data]
     ports: ["9000:9000", "9001:9001"]
     healthcheck:
@@ -77,7 +77,359 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
+  identity:
+    build: { context: ., dockerfile: services/identity/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: identity
+      DATABASE_URL: postgresql+psycopg://identity_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/identity
+    ports: ["8001:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.identity.rule=PathPrefix(`/api/v1/identity`)
+      - traefik.http.services.identity.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100
+      - traefik.http.middlewares.ratelimit.ratelimit.burst=50
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.identity.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  identity-worker:
+    build: { context: ., dockerfile: services/identity/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: identity-worker
+      DATABASE_URL: postgresql+psycopg://identity_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/identity
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  profile:
+    build: { context: ., dockerfile: services/profile/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: profile
+      DATABASE_URL: postgresql+psycopg://profile_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/profile
+    ports: ["8002:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.profile.rule=PathPrefix(`/api/v1/profile`)
+      - traefik.http.services.profile.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.profile.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  profile-worker:
+    build: { context: ., dockerfile: services/profile/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: profile-worker
+      DATABASE_URL: postgresql+psycopg://profile_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/profile
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  catalog:
+    build: { context: ., dockerfile: services/catalog/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: catalog
+      DATABASE_URL: postgresql+psycopg://catalog_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/catalog
+    ports: ["8003:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.catalog.rule=PathPrefix(`/api/v1/catalog`)
+      - traefik.http.services.catalog.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.catalog.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  catalog-worker:
+    build: { context: ., dockerfile: services/catalog/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: catalog-worker
+      DATABASE_URL: postgresql+psycopg://catalog_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/catalog
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  order:
+    build: { context: ., dockerfile: services/order/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: order
+      DATABASE_URL: postgresql+psycopg://orders_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/orders
+    ports: ["8004:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.order.rule=PathPrefix(`/api/v1/order`)
+      - traefik.http.services.order.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.order.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  order-worker:
+    build: { context: ., dockerfile: services/order/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: order-worker
+      DATABASE_URL: postgresql+psycopg://orders_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/orders
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  wallet:
+    build: { context: ., dockerfile: services/wallet/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: wallet
+      DATABASE_URL: postgresql+psycopg://wallet_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/wallet
+    ports: ["8005:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.wallet.rule=PathPrefix(`/api/v1/wallet`)
+      - traefik.http.services.wallet.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.wallet.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  wallet-worker:
+    build: { context: ., dockerfile: services/wallet/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: wallet-worker
+      DATABASE_URL: postgresql+psycopg://wallet_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/wallet
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  review:
+    build: { context: ., dockerfile: services/review/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: review
+      MONGO_DB: review
+    ports: ["8006:8000"]
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.review.rule=PathPrefix(`/api/v1/review`)
+      - traefik.http.services.review.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.review.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  review-worker:
+    build: { context: ., dockerfile: services/review/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: review-worker
+      MONGO_DB: review
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  trading:
+    build: { context: ., dockerfile: services/trading/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: trading
+      DATABASE_URL: postgresql+psycopg://trading_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/trading
+    ports: ["8007:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.trading.rule=PathPrefix(`/api/v1/trading`)
+      - traefik.http.services.trading.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.trading.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  trading-worker:
+    build: { context: ., dockerfile: services/trading/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: trading-worker
+      DATABASE_URL: postgresql+psycopg://trading_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/trading
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  forum:
+    build: { context: ., dockerfile: services/forum/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: forum
+      MONGO_DB: forum
+    ports: ["8008:8000"]
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.forum.rule=PathPrefix(`/api/v1/forum`)
+      - traefik.http.services.forum.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.forum.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  forum-worker:
+    build: { context: ., dockerfile: services/forum/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: forum-worker
+      MONGO_DB: forum
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  festival:
+    build: { context: ., dockerfile: services/festival/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: festival
+      DATABASE_URL: postgresql+psycopg://festival_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/festival
+    ports: ["8009:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.festival.rule=PathPrefix(`/api/v1/festival`)
+      - traefik.http.services.festival.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.festival.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  festival-worker:
+    build: { context: ., dockerfile: services/festival/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: festival-worker
+      DATABASE_URL: postgresql+psycopg://festival_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/festival
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  media:
+    build: { context: ., dockerfile: services/media/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: media
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-media}
+    ports: ["8010:8000"]
+    depends_on:
+      minio: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.media.rule=PathPrefix(`/api/v1/media`)
+      - traefik.http.services.media.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.media.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  media-worker:
+    build: { context: ., dockerfile: services/media/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: media-worker
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-media}
+    depends_on:
+      minio: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  notification:
+    build: { context: ., dockerfile: services/notification/Dockerfile }
+    environment:
+      <<: *service-env
+      SERVICE_NAME: notification
+      MONGO_DB: notification
+    ports: ["8011:8000"]
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.notification.rule=PathPrefix(`/api/v1/notification`)
+      - traefik.http.services.notification.loadbalancer.server.port=8000
+      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.notification.middlewares=ratelimit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+
+  notification-worker:
+    build: { context: ., dockerfile: services/notification/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *service-env
+      SERVICE_NAME: notification-worker
+      MONGO_DB: notification
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
 volumes:
   pgdata:
   mongodata:
   miniodata:
+

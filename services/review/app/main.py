@@ -2,8 +2,8 @@
 
 from shared_kernel.app import create_app
 
-app = create_app("_template")
-router = APIRouter(prefix="/api/v1/_template")
+app = create_app("review")
+router = APIRouter(prefix="/api/v1/review")
 
 
 @router.get("/health")
