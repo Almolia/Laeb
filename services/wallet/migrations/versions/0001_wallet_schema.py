@@ -68,7 +68,7 @@ def upgrade() -> None:
     )
     op.create_table(
         "outbox",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("event_name", sa.String(100), nullable=False),
         sa.Column("payload", postgresql.JSONB(), nullable=False),
         sa.Column("correlation_id", sa.String(64), nullable=False, server_default="-"),
@@ -79,7 +79,7 @@ def upgrade() -> None:
     op.create_index("ix_outbox_unpublished", "outbox", ["published_at", "created_at"])
     op.create_table(
         "processed_events",
-        sa.Column("event_id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("event_id", sa.String(36), primary_key=True),
         sa.Column("processed_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     op.execute(

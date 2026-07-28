@@ -23,7 +23,7 @@ from app.application.giftcards import redeem_card  # noqa: E402
 from app.application.ledger import credit_user, purchase_split, reverse_group  # noqa: E402
 from app.application.topups import handle_callback  # noqa: E402
 from app.infrastructure.models import Account, GiftCard, Topup  # noqa: E402
-from app.infrastructure.outbox import claim_event  # noqa: E402
+from shared_kernel.inbox import claim  # noqa: E402
 
 
 @pytest.fixture()
@@ -119,10 +119,10 @@ def test_repeated_psp_callback_credits_once(session):
 
 
 def test_inbox_claim_is_true_once_and_false_on_redelivery(session):
-    event_id = uuid.uuid4()
-    assert claim_event(session, event_id) is True
+    event_id = str(uuid.uuid4())
+    assert claim(session, event_id) is True
     session.commit()
-    assert claim_event(session, event_id) is False
+    assert claim(session, event_id) is False
     session.commit()
 
 

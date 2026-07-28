@@ -1,4 +1,4 @@
-"""Executable A3 acceptance test against the Docker Compose stack."""
+"""Executable A3 acceptance test against the complete A1 Docker Compose stack."""
 
 import json
 import os

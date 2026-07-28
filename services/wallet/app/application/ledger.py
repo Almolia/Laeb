@@ -15,15 +15,15 @@ from app.domain.model import (
     transfer_entries,
 )
 from app.infrastructure.models import Account, LedgerEntry
-from shared_kernel.config import get_settings
-from shared_kernel.context import correlation_id
+from shared_kernel.config import settings
 from shared_kernel.errors import AppError
+from shared_kernel.logging import correlation_id
 
 Owner = tuple[str, uuid.UUID]
 
 
 def _platform_owner() -> Owner:
-    return "PLATFORM", uuid.UUID(get_settings().platform_account_id)
+    return "PLATFORM", uuid.UUID(settings.platform_account_id)
 
 
 def ensure_platform_account(session: Session) -> None:

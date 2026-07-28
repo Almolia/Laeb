@@ -4,11 +4,12 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.infrastructure import models  # noqa: F401
-from shared_kernel.config import get_settings
+from shared_kernel import idempotency, inbox, outbox  # noqa: F401
+from shared_kernel.config import settings
 from shared_kernel.db import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+config.set_main_option("sqlalchemy.url", settings.database_url)
 if config.config_file_name:
     fileConfig(config.config_file_name)
 target_metadata = Base.metadata

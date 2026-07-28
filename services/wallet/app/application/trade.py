@@ -3,9 +3,9 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.application.ledger import transfer_users
-from app.infrastructure.outbox import enqueue
 from app.domain.model import DomainError
 from shared_kernel.errors import AppError
+from shared_kernel.outbox import enqueue
 
 
 def settle_trade(session: Session, payload: dict) -> dict:
@@ -31,9 +31,9 @@ def settle_trade(session: Session, payload: dict) -> dict:
             ref_id=trade_id,
         )
         event = {"tradeId": trade_id, "ok": True, "reason": None}
-        enqueue(session, "trade.payment_settled", event)
+        enqueue(session, "trade.payment_settled", event, producer="wallet")
         return event | result
     except (AppError, DomainError) as exc:
         event = {"tradeId": trade_id, "ok": False, "reason": exc.code}
-        enqueue(session, "trade.payment_settled", event)
+        enqueue(session, "trade.payment_settled", event, producer="wallet")
         return event

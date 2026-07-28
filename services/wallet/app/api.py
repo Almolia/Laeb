@@ -17,8 +17,7 @@ from app.application.ledger import (
 )
 from app.application.topups import handle_callback, initiate_topup
 from app.infrastructure.models import LedgerEntry
-from shared_kernel.auth import require_admin
-from shared_kernel.auth import CurrentUser, get_current_user
+from shared_kernel.auth import ROLE_ADMIN, CurrentUser, get_current_user, requires_role
 from shared_kernel.db import get_session
 from shared_kernel.errors import AppError
 
@@ -91,6 +90,7 @@ def my_wallet(
 ) -> dict:
     user_id = _user_uuid(user)
     account = get_user_account(session, user_id)
+    session.commit()
     return {"userId": str(user_id), "balanceMinor": account.balance_minor}
 
 
@@ -109,6 +109,7 @@ def my_ledger(
         .limit(limit)
         .offset(offset)
     ).scalars().all()
+    session.commit()
     return [
         {
             "txGroupId": str(entry.tx_group_id),
@@ -129,21 +130,27 @@ def topup_initiate(
     user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> dict:
-    return initiate_topup(session, _user_uuid(user), body.amountMinor)
+    result = initiate_topup(session, _user_uuid(user), body.amountMinor)
+    session.commit()
+    return result
 
 
 @router.post("/topups/callback")
 def topup_callback(body: TopupCallbackIn, session: Session = Depends(get_session)) -> dict:
-    return handle_callback(session, body.paymentId, body.reference, body.status)
+    result = handle_callback(session, body.paymentId, body.reference, body.status)
+    session.commit()
+    return result
 
 
 @router.post("/giftcards", status_code=201)
 def giftcard_create(
     body: GiftcardCreateIn,
-    _admin: CurrentUser = Depends(require_admin),
+    _admin: CurrentUser = Depends(requires_role(ROLE_ADMIN)),
     session: Session = Depends(get_session),
 ) -> dict:
-    return {"codes": create_cards(session, body.amountMinor, body.count)}
+    result = {"codes": create_cards(session, body.amountMinor, body.count)}
+    session.commit()
+    return result
 
 
 @router.post("/giftcards/redeem")

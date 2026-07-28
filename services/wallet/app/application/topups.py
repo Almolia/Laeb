@@ -1,4 +1,5 @@
 import uuid
+import os
 
 import httpx
 from sqlalchemy import select
@@ -6,9 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.application.ledger import credit_user
 from app.infrastructure.models import Topup
-from app.infrastructure.outbox import enqueue
-from shared_kernel.config import get_settings
 from shared_kernel.errors import AppError
+from shared_kernel.outbox import enqueue
+
+MOCK_PSP_URL = os.getenv("MOCK_PSP_URL", "http://mock-psp:8000")
+WALLET_CALLBACK_URL = os.getenv(
+    "WALLET_CALLBACK_URL", "http://wallet:8000/api/v1/wallet/topups/callback"
+)
 
 
 def initiate_topup(session: Session, user_id: uuid.UUID, amount_minor: int) -> dict:
@@ -17,13 +22,12 @@ def initiate_topup(session: Session, user_id: uuid.UUID, amount_minor: int) -> d
     topup = Topup(user_id=user_id, amount_minor=amount_minor, status="PENDING")
     session.add(topup)
     session.flush()
-    settings = get_settings()
     try:
         response = httpx.post(
-            f"{settings.mock_psp_url.rstrip('/')}/charge",
+            f"{MOCK_PSP_URL.rstrip('/')}/charge",
             json={
                 "amountMinor": amount_minor,
-                "callbackUrl": settings.wallet_callback_url,
+                "callbackUrl": WALLET_CALLBACK_URL,
                 "reference": str(topup.id),
             },
             timeout=10,
@@ -76,6 +80,7 @@ def handle_callback(
         session,
         "wallet.topped_up",
         {"userId": str(topup.user_id), "amountMinor": topup.amount_minor, "source": "PSP"},
+        producer="wallet",
     )
     return {
         "status": "SUCCEEDED",
