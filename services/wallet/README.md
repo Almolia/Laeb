@@ -320,7 +320,8 @@ replay یکسان و استفاده همان key با body متفاوت را پ�
 محیط میزبان و container:
 
 - virtualenv: Python 3.13.7؛ تمام نسخه‌های `requirements.txt` نصب شدند.
-- imageهای اجرایی: Python 3.12-slim، ساخته‌شده با `docker build --network=host`.
+- imageهای اجرایی: Python 3.12-slim. در تست این محیط، برای عبور از محدودیت DNS از
+  `docker build --network=host` استفاده شد؛ این گزینه بخشی از runtime یا Compose نهایی نیست.
 - PostgreSQL 17 Alpine و RabbitMQ 4 Management Alpine.
 - containerهای `postgres`، `rabbitmq`، `mock-psp` و `wallet` در پایان تست healthy و worker running بودند.
 
@@ -343,6 +344,11 @@ docker compose up -d --no-build
 .venv/bin/python scripts/test_a3_e2e.py
 # A3 end-to-end acceptance: PASS
 ```
+
+شبکه‌ی runtime در Compose، شبکه‌ی معمول bridge با DNS داخلی Compose است؛ کانتینرها با نام‌های
+`postgres`، `rabbitmq` و `mock-psp` به یکدیگر وصل می‌شوند و `network_mode: host` ندارند. اگر محیط
+ساخت به PyPI دسترسی عادی داشته باشد، دستور استاندارد `docker compose build` کافی است. گزینه‌ی
+`--network=host` فقط workaround مرحله‌ی build در این ماشین بود.
 
 تست E2E علاوه بر HTTP، مستقیماً PostgreSQL و RabbitMQ را بررسی می‌کند؛ بنابراین پاسخ 200 به‌تنهایی
 معیار قبولی نیست و ledger invariant، موجودی نهایی، outbox، redelivery و triggerهای دیتابیس نیز

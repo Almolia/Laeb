@@ -30,7 +30,6 @@ services:
     build:
       context: ..
       dockerfile: mock-psp/Dockerfile
-      network: host
     ports:
       - "8020:8000"
     healthcheck:
@@ -43,7 +42,6 @@ services:
     build:
       context: ..
       dockerfile: services/wallet/Dockerfile
-      network: host
     environment: &wallet-env
       DATABASE_URL: postgresql+psycopg://wallet:wallet@postgres:5432/wallet
       JWT_SECRET: development-secret
@@ -69,7 +67,6 @@ services:
     build:
       context: ..
       dockerfile: services/wallet/Dockerfile
-      network: host
     command: ["sh", "-c", "alembic upgrade head && python -m app.worker"]
     environment: *wallet-env
     depends_on:
