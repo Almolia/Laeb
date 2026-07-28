@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: wallet
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallet -d wallet"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "5432:5432"
+    volumes:
+      - wallet-postgres:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  mock-psp:
+    build:
+      context: ..
+      dockerfile: mock-psp/Dockerfile
+    ports:
+      - "8020:8000"
+
+  wallet:
+    build:
+      context: ..
+      dockerfile: services/wallet/Dockerfile
+    environment: &wallet-env
+      DATABASE_URL: postgresql+psycopg://wallet:wallet@postgres:5432/wallet
+      JWT_SECRET: development-secret
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F
+      MOCK_PSP_URL: http://mock-psp:8000
+      WALLET_CALLBACK_URL: http://wallet:8000/api/v1/wallet/topups/callback
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "8005:8000"
+
+  wallet-worker:
+    build:
+      context: ..
+      dockerfile: services/wallet/Dockerfile
+    command: ["sh", "-c", "alembic upgrade head && python -m app.worker"]
+    environment: *wallet-env
+    depends_on:
+      wallet:
+        condition: service_healthy
+
+volumes:
+  wallet-postgres:
