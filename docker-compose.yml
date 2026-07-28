@@ -12,6 +12,10 @@ x-service-env: &service-env
   MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017}
   PLATFORM_ACCOUNT_ID: ${PLATFORM_ACCOUNT_ID:-00000000-0000-0000-0000-000000000001}
 
+x-ratelimit-labels: &ratelimit-labels
+  - traefik.http.middlewares.ratelimit.ratelimit.average=100
+  - traefik.http.middlewares.ratelimit.ratelimit.burst=50
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -77,6 +81,31 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    volumes:
+      - ./infra/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+
+  mock-psp:
+    build: { context: ., dockerfile: mock-psp/Dockerfile }
+    ports: ["8020:8020"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 10s
+      retries: 5
+
   identity:
     build: { context: ., dockerfile: services/identity/Dockerfile }
     environment:
@@ -93,7 +122,7 @@ services:
       - traefik.http.services.identity.loadbalancer.server.port=8000
       - traefik.http.middlewares.ratelimit.ratelimit.average=100
       - traefik.http.middlewares.ratelimit.ratelimit.burst=50
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.identity.middlewares=ratelimit
+      - traefik.http.routers.identity.middlewares=ratelimit
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -125,7 +154,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.profile.rule=PathPrefix(`/api/v1/profile`)
       - traefik.http.services.profile.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.profile.middlewares=ratelimit
+      - traefik.http.routers.profile.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -156,7 +185,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.catalog.rule=PathPrefix(`/api/v1/catalog`)
       - traefik.http.services.catalog.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.catalog.middlewares=ratelimit
+      - traefik.http.routers.catalog.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -187,7 +216,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.order.rule=PathPrefix(`/api/v1/order`)
       - traefik.http.services.order.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.order.middlewares=ratelimit
+      - traefik.http.routers.order.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -218,7 +247,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.wallet.rule=PathPrefix(`/api/v1/wallet`)
       - traefik.http.services.wallet.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.wallet.middlewares=ratelimit
+      - traefik.http.routers.wallet.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -249,7 +278,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.review.rule=PathPrefix(`/api/v1/review`)
       - traefik.http.services.review.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.review.middlewares=ratelimit
+      - traefik.http.routers.review.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -281,7 +310,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.trading.rule=PathPrefix(`/api/v1/trading`)
       - traefik.http.services.trading.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.trading.middlewares=ratelimit
+      - traefik.http.routers.trading.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -312,7 +341,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.forum.rule=PathPrefix(`/api/v1/forum`)
       - traefik.http.services.forum.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.forum.middlewares=ratelimit
+      - traefik.http.routers.forum.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -343,7 +372,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.festival.rule=PathPrefix(`/api/v1/festival`)
       - traefik.http.services.festival.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.festival.middlewares=ratelimit
+      - traefik.http.routers.festival.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -377,7 +406,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.media.rule=PathPrefix(`/api/v1/media`)
       - traefik.http.services.media.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.media.middlewares=ratelimit
+      - traefik.http.routers.media.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -411,7 +440,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.notification.rule=PathPrefix(`/api/v1/notification`)
       - traefik.http.services.notification.loadbalancer.server.port=8000
-      - traefik.http.middlewares.ratelimit.ratelimit.average=100`n      - traefik.http.middlewares.ratelimit.ratelimit.burst=50`n      - traefik.http.routers.notification.middlewares=ratelimit
+      - traefik.http.routers.notification.middlewares=ratelimit@docker
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -432,4 +461,3 @@ volumes:
   pgdata:
   mongodata:
   miniodata:
-
