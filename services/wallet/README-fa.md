@@ -98,6 +98,10 @@ PYTHONPATH=services/wallet:<A1_SHARED_KERNEL> \
 # 6 passed
 ```
 
+در branch مستقل A3، چون `pytest.ini` متعلق به A1 هنوز وارد نشده است، pytest برای marker
+`integration` دو warning غیرمسدودکننده نشان می‌دهد؛ هر دو تست سبز هستند. پس از merge شدن
+foundation نقش A1، marker در تنظیمات ریشه ثبت می‌شود.
+
 ### تست E2E
 
 ```bash
