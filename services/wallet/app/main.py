@@ -2,13 +2,12 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
-from sqlalchemy.orm import Session
 
 from shared_kernel.config import get_settings
 from app.api import router as wallet_router
 from app.domain.model import DomainError
 from shared_kernel.db import session_factory
-from shared_kernel.errors import AppError, error_body
+from shared_kernel.errors import error_body
 from shared_kernel.errors import install_error_handlers
 from shared_kernel.logging import configure_logging
 from shared_kernel.middleware import install_request_middleware

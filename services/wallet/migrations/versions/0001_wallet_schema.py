@@ -87,6 +87,10 @@ def upgrade() -> None:
           RAISE EXCEPTION 'ledger_entries is append-only';
         END;
         $$ LANGUAGE plpgsql;
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER ledger_entries_append_only
           BEFORE UPDATE OR DELETE ON ledger_entries
           FOR EACH ROW EXECUTE FUNCTION reject_ledger_mutation();

@@ -1,0 +1,4 @@
+# Standalone A3 entrypoint. A1 can replace this with the full platform Compose while keeping
+# deploy/docker-compose.wallet.yml as the Wallet service definition.
+include:
+  - path: deploy/docker-compose.wallet.yml
