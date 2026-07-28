@@ -13,16 +13,27 @@ jobs:
         run: docker compose build
 
       - name: Start stack without workers
-        # Full stack + 11 workers OOMs GitHub runners (~7GB).
-        # Smoke only needs API containers behind the gateway.
+        # Skip *-worker to fit GHA RAM. Do not use --wait: MinIO has no
+        # healthcheck binary (scratch image) and --wait then fails the job.
         run: |
           set -euo pipefail
           mapfile -t SERVICES < <(docker compose config --services | grep -v -- '-worker$')
           echo "Starting: ${SERVICES[*]}"
-          docker compose up -d --wait --wait-timeout 240 "${SERVICES[@]}"
+          docker compose up -d "${SERVICES[@]}"
 
-      - name: Smoke through gateway
-        run: bash scripts/smoke.sh
+      - name: Wait until smoke passes
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if bash scripts/smoke.sh; then
+              echo "ready after attempt $i"
+              exit 0
+            fi
+            echo "attempt $i failed; sleeping..."
+            sleep 5
+          done
+          echo "smoke never passed"
+          exit 1
 
       - name: Dump diagnostics on failure
         if: failure()
