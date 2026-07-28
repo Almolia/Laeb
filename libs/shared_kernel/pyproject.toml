@@ -9,6 +9,8 @@ dependencies = [
   "pydantic-settings==2.5.2",
   "pyjwt==2.9.0",
   "passlib[bcrypt]==1.7.4",
+  "bcrypt==4.0.1",
+  "pytest==8.3.3",
   "sqlalchemy==2.0.35",
   "psycopg[binary]==3.2.2",
   "alembic==1.13.3",
@@ -21,6 +23,7 @@ dependencies = [
   "apscheduler==3.10.4",
   "minio==7.2.9",
   "python-multipart==0.0.12",
+  "email-validator==2.2.0",
 ]
 
 [build-system]

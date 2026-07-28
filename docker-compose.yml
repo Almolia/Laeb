@@ -108,6 +108,8 @@ services:
       <<: *service-env
       SERVICE_NAME: identity
       DATABASE_URL: postgresql+psycopg://identity_user:${SERVICE_DB_PASSWORD:-servicepass}@postgres:5432/identity
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
     ports: ["8001:8000"]
     depends_on:
       postgres: { condition: service_healthy }
