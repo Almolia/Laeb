@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: services
+    static_configs:
+      - targets:
+          - identity:8000
+          - profile:8000
+          - catalog:8000
+          - order:8000
+          - wallet:8000
+          - review:8000
+          - trading:8000
+          - forum:8000
+          - festival:8000
+          - media:8000
+          - notification:8000
