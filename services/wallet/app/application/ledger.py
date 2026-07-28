@@ -26,6 +26,11 @@ def _platform_owner() -> Owner:
     return "PLATFORM", uuid.UUID(get_settings().platform_account_id)
 
 
+def ensure_platform_account(session: Session) -> None:
+    """Seed the platform counterparty once migrations are complete."""
+    lock_owner_accounts(session, [_platform_owner()])
+
+
 def lock_owner_accounts(session: Session, owners: Iterable[Owner]) -> dict[Owner, Account]:
     unique_owners = sorted(set(owners), key=lambda item: (item[0], str(item[1])))
     if not unique_owners:

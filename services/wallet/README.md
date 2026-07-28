@@ -180,6 +180,7 @@ Wallet مصرف می‌کند:
 
 - REST/JSON برای callهای sync داخلی استفاده شده و transport با ADR-04 از Phase 1 به‌روزرسانی شده است.
 - حساب کاربر lazy ساخته می‌شود؛ Wallet به `user.registered` برای ایجاد حساب وابسته نیست.
+- حساب پلتفرم در startup پس از migration seed می‌شود؛ حساب کاربران فقط در اولین دسترسی ساخته می‌شود.
 - حساب platform طرف مقابل صدور اعتبار است و در صورت top-up/gift card می‌تواند منفی شود.
 - برای debit عادی، `balance_minor` هرگز زیر صفر نمی‌رود؛ فقط reversal می‌تواند بدهی توسعه‌دهنده ایجاد کند.
 - endpointهای internal در Compose برای سرویس‌های هم‌تیمی هستند؛ در Compose نهایی باید با network

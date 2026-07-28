@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from shared_kernel.config import get_settings
 from app.api import router as wallet_router
+from app.application.ledger import ensure_platform_account
 from app.domain.model import DomainError
 from shared_kernel.db import session_factory
 from shared_kernel.errors import error_body
@@ -19,6 +20,13 @@ app = FastAPI(title="Wallet Service", version="1.0.0")
 install_error_handlers(app)
 install_request_middleware(app, settings.service_name)
 app.include_router(wallet_router)
+
+
+@app.on_event("startup")
+def seed_platform_account() -> None:
+    with session_factory()() as session:
+        ensure_platform_account(session)
+        session.commit()
 
 
 @app.exception_handler(DomainError)
