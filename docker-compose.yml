@@ -12,10 +12,6 @@ x-service-env: &service-env
   MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017}
   PLATFORM_ACCOUNT_ID: ${PLATFORM_ACCOUNT_ID:-00000000-0000-0000-0000-000000000001}
 
-x-ratelimit-labels: &ratelimit-labels
-  - traefik.http.middlewares.ratelimit.ratelimit.average=100
-  - traefik.http.middlewares.ratelimit.ratelimit.burst=50
-
 services:
   postgres:
     image: postgres:16-alpine
