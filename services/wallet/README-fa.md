@@ -6,7 +6,8 @@
 ## وضعیت Git
 
 - branch: `feat/a3-wallet`
-- آخرین commit: `50d8d55 refactor(wallet): align A3 ownership with platform foundation`
+- commit پیاده‌سازی: `50d8d55 refactor(wallet): align A3 ownership with platform foundation`
+- commit گزارش نهایی: `28f9aa7 docs(wallet): add final Persian verification report`
 - push انجام نشده است.
 - working tree قبل از افزودن همین فایل تمیز بود.
 - اختلاف نهایی با `main` فقط در `services/wallet/` است.
