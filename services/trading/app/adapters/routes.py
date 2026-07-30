@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.application import service as svc
-from shared_kernel.auth import ROLE_DEVELOPER, CurrentUser, get_current_user, requires_role
+from app.application.matching_cycle import list_match_cycles, run_cycle_with_lock
+from shared_kernel.auth import ROLE_ADMIN, ROLE_DEVELOPER, CurrentUser, get_current_user, requires_role
 from shared_kernel.db import get_session
 
 router = APIRouter(prefix="/api/v1/trading", tags=["trading"])
@@ -175,3 +176,19 @@ def get_trades(
     db: Session = Depends(get_session),
 ):
     return svc.trade_history(db, item_id=itemId, limit=limit)
+
+
+
+@router.get("/match-cycles")
+def get_match_cycles(
+    limit: int = Query(default=20, ge=1, le=100),
+    _: CurrentUser = Depends(get_current_user),
+):
+    return list_match_cycles(limit)
+
+
+@router.post("/internal/run-match-cycle")
+def manual_match_cycle(
+    _: CurrentUser = Depends(requires_role(ROLE_ADMIN)),
+):
+    return run_cycle_with_lock()
