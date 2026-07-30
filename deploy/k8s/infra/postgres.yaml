@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: laeb
+data:
+  init.sql: |
+    CREATE USER identity_user WITH PASSWORD 'servicepass';
+    CREATE DATABASE identity OWNER identity_user;
+    CREATE USER profile_user WITH PASSWORD 'servicepass';
+    CREATE DATABASE profile OWNER profile_user;
+    CREATE USER catalog_user WITH PASSWORD 'servicepass';
+    CREATE DATABASE catalog OWNER catalog_user;
+    CREATE USER orders_user WITH PASSWORD 'servicepass';
+    CREATE DATABASE orders OWNER orders_user;
+    CREATE USER wallet_user WITH PASSWORD 'servicepass';
+    CREATE DATABASE wallet OWNER wallet_user;
+    CREATE USER trading_user WITH PASSWORD 'servicepass';
+    CREATE DATABASE trading OWNER trading_user;
+    CREATE USER festival_user WITH PASSWORD 'servicepass';
+    CREATE DATABASE festival OWNER festival_user;
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: laeb
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: laeb
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - {name: postgres, containerPort: 5432}
+          env:
+            - {name: POSTGRES_USER, value: postgres}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: laeb-secrets, key: POSTGRES_PASSWORD}}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d}
+          readinessProbe:
+            exec: {command: [pg_isready, -U, postgres]}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 1000m, memory: 1Gi}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: postgres-data}
+        - name: init
+          configMap: {name: postgres-init}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: laeb
+spec:
+  selector: {app: postgres}
+  ports:
+    - {name: postgres, port: 5432, targetPort: postgres}

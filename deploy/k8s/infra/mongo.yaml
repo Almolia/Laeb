@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-data
+  namespace: laeb
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 5Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+  namespace: laeb
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: mongo}
+  template:
+    metadata:
+      labels: {app: mongo}
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:7
+          ports:
+            - {name: mongo, containerPort: 27017}
+          volumeMounts:
+            - {name: data, mountPath: /data/db}
+          readinessProbe:
+            exec: {command: [mongosh, --quiet, --eval, "db.adminCommand('ping')"]}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 1000m, memory: 1Gi}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: mongo-data}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: laeb
+spec:
+  selector: {app: mongo}
+  ports:
+    - {name: mongo, port: 27017, targetPort: mongo}

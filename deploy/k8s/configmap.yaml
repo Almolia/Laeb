@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: laeb-config
+  namespace: laeb
+data:
+  ENV: "production"
+  LOG_LEVEL: "INFO"
+  JWT_ALG: "HS256"
+  JWT_EXPIRE_MINUTES: "60"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+  EVENT_EXCHANGE: "platform.events"
+  REDIS_URL: "redis://redis:6379"
+  MONGO_URL: "mongodb://mongo:27017"
+  CATALOG_URL: "http://catalog/api/v1/catalog"
+  IDENTITY_URL: "http://identity/api/v1/identity"
+  PLATFORM_ACCOUNT_ID: "00000000-0000-0000-0000-000000000001"

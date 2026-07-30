@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: laeb
+  namespace: laeb
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: laeb.local
+      http:
+        paths:
+          - {path: /api/v1/identity, pathType: Prefix, backend: {service: {name: identity, port: {number: 80}}}}
+          - {path: /api/v1/profile, pathType: Prefix, backend: {service: {name: profile, port: {number: 80}}}}
+          - {path: /api/v1/catalog, pathType: Prefix, backend: {service: {name: catalog, port: {number: 80}}}}
+          - {path: /api/v1/order, pathType: Prefix, backend: {service: {name: order, port: {number: 80}}}}
+          - {path: /api/v1/wallet, pathType: Prefix, backend: {service: {name: wallet, port: {number: 80}}}}
+          - {path: /api/v1/review, pathType: Prefix, backend: {service: {name: review, port: {number: 80}}}}
+          - {path: /api/v1/trading, pathType: Prefix, backend: {service: {name: trading, port: {number: 80}}}}
+          - {path: /api/v1/forum, pathType: Prefix, backend: {service: {name: forum, port: {number: 80}}}}
+          - {path: /api/v1/festival, pathType: Prefix, backend: {service: {name: festival, port: {number: 80}}}}
+          - {path: /api/v1/media, pathType: Prefix, backend: {service: {name: media, port: {number: 80}}}}
+          - {path: /api/v1/notification, pathType: Prefix, backend: {service: {name: notification, port: {number: 80}}}}
