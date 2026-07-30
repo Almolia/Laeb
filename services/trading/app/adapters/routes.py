@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,12 @@ class GrantItemBody(BaseModel):
     minQuantity: int | None = Field(default=None, ge=1)
     maxQuantity: int | None = Field(default=None, ge=1)
     seed: int | None = None
+
+
+class OrderBody(BaseModel):
+    itemId: str
+    priceMinor: int = Field(gt=0)
+    quantity: int = Field(gt=0)
 
 
 def _request_context(request: Request) -> tuple[str, str | None]:
@@ -105,3 +111,67 @@ def user_inventory(
     db: Session = Depends(get_session),
 ):
     return svc.inventory(db, user_id)
+
+
+
+@router.post("/orders/buy", status_code=201)
+def buy_order(
+    body: OrderBody,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    return svc.place_buy_order(
+        db,
+        user_id=user.user_id,
+        item_id=body.itemId,
+        price_minor=body.priceMinor,
+        quantity=body.quantity,
+    )
+
+
+@router.post("/orders/sell", status_code=201)
+def sell_order(
+    body: OrderBody,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    return svc.place_sell_order(
+        db,
+        user_id=user.user_id,
+        item_id=body.itemId,
+        price_minor=body.priceMinor,
+        quantity=body.quantity,
+    )
+
+
+@router.get("/orders/me")
+def my_orders(
+    status: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    return svc.list_my_orders(db, user.user_id, status)
+
+
+@router.delete("/orders/{order_id}")
+def cancel_order(
+    order_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    return svc.cancel_order(db, order_id, user.user_id)
+
+
+@router.get("/items/{item_id}/orderbook")
+def get_orderbook(item_id: str, db: Session = Depends(get_session)):
+    return svc.orderbook(db, item_id)
+
+
+@router.get("/trades")
+def get_trades(
+    itemId: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    _: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    return svc.trade_history(db, item_id=itemId, limit=limit)
