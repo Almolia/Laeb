@@ -325,3 +325,8 @@ def get_users_by_ids(db: Session, ids: list[str]) -> list[dict]:
         db.execute(select(UserRow).where(UserRow.id.in_(ids))).scalars().all()
     )
     return [{"userId": r.id, "username": r.username} for r in rows]
+
+
+def list_users(db: Session) -> list[dict]:
+    rows = db.execute(select(UserRow).order_by(UserRow.created_at.asc())).scalars().all()
+    return [{"userId": r.id, "username": r.username} for r in rows]

@@ -124,11 +124,13 @@ def get_user(
 
 @router.get("/users")
 def get_users(
-    ids: str = Query(..., description="Comma-separated user ids"),
+    ids: str | None = Query(default=None, description="Optional comma-separated user ids"),
     _: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_session),
 ):
+    if ids is None:
+        return svc.list_users(db)
     id_list = [i.strip() for i in ids.split(",") if i.strip()]
     if not id_list:
-        raise AppError("VALIDATION_ERROR", "ids query is required", 422)
+        raise AppError("VALIDATION_ERROR", "ids must contain at least one user id", 422)
     return svc.get_users_by_ids(db, id_list)
